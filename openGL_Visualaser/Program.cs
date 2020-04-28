@@ -56,14 +56,15 @@ namespace openGL_Visualaser
     class Program
     {
 
-        //  static KalmanFilterSimple1D kax = new KalmanFilterSimple1D(f: 1, h: 1, q: 2, r: 15), kay = new KalmanFilterSimple1D(f: 1, h: 1, q: 2, r: 15), kaz = new KalmanFilterSimple1D(f: 1, h: 1, q: 2, r: 15);
+        static KalmanFilterSimple1D kax = new KalmanFilterSimple1D(f: 1, h: 1, q: 2, r: 15), kay = new KalmanFilterSimple1D(f: 1, h: 1, q: 2, r: 15), kaz = new KalmanFilterSimple1D(f: 1, h: 1, q: 2, r: 15);
 
 
-        static float[,] calA = { { 0.768688f, 0.024794f, 0.004793f }, { 0.024794f, 0.811833f, -0.001076f }, { 0.004793f, -0.001076f, 0.785572f } };
-
+        static float[,] calA = {
+            { 0.477735f,-0.005839f, -0.003274f },
+            { -0.005839f, 0.501778f, 0.031176f },
+            { -0.003274f, 0.031176f, 0.499463f } };
         static void data(object sender, SerialDataReceivedEventArgs e)
         {
-
             while (srp.ReadByte() != 0xFF) if (srp.BytesToRead <= 0) return;
             while (srp.ReadByte() != 0x00) if (srp.BytesToRead <= 0) return;
             while (srp.BytesToRead < 18) ;
@@ -85,22 +86,22 @@ namespace openGL_Visualaser
               ggx = data[3] ;
               ggy = data[4] ;
               ggz = data[5] ;*/
-            /* kax.Correct(data[0]);
-             kay.Correct(data[1]);
-             kaz.Correct(data[2]);
-             gax = (float)kax.State;
-             gay = (float)kay.State;
-             gaz = (float)kaz.State;*/
-            gax = Filter(gax, data[0], 0.7f);
-            gay = Filter(gay, data[1], 0.7f);
-            gaz = Filter(gaz, data[2], 0.7f);
+            kax.Correct(data[0]);
+            kay.Correct(data[1]);
+            kaz.Correct(data[2]);
+            gax = (float)kax.State;
+            gay = (float)kay.State;
+            gaz = (float)kaz.State;
+            /*  gax = Filter(gax, data[0], 0.8f);
+              gay = Filter(gay, -data[1], 0.8f);
+              gaz = Filter(gaz, -data[2], 0.8f);*/
             /* ggx = Filter(ggx, data[3], 0.06f);
              ggy = Filter(ggy, data[4], 0.06f);
              ggz = Filter(ggz, data[5], 0.06f);*/
 
-            gm[0] = Filter(gm[0], data[6] + 320.674496f, 0.8f);
-            gm[1] = Filter(gm[1], data[7] + 100.188759f, 0.8f);
-            gm[2] = Filter(gm[2], data[8] - 221.163011f, 0.8f);
+            gm[0] = Filter(gm[0], data[6] - 48.843195f, 0.8f);
+            gm[1] = Filter(gm[1], data[7] + 183.689342f, 0.8f);
+            gm[2] = Filter(gm[2], data[8] - 109.846870f, 0.8f);
             mult();
         }
 
@@ -204,6 +205,7 @@ namespace openGL_Visualaser
 
                     float ax = gax / 16200f, ay = gay / 16200f, az = gaz / 16200f;//, gx = ggx * toRadSec, gy = ggy * toRadSec, gz = ggz * toRadSec;
 
+                    float N = (float)Math.Sqrt(ax * ax + ay * ay + az * az);
 
 
                     if (ax > 1f) ax = 1f;
@@ -213,23 +215,26 @@ namespace openGL_Visualaser
                     if (az > 1f) az = 1f;
                     else if (az < -1f) az = -1f;
 
-                    //  float roll = PI_05 - (float)Math.Acos(ax);
-                    //  float pitch = PI_05 - (float)Math.Acos(az);
-
-                    // float mgx = (float)(gm[0] * Math.Cos(pitch) + gm[2] * Math.Sin(pitch) * Math.Sin(roll) + gm[1] * Math.Cos(roll) * Math.Sin(pitch));
-
-                    // float mgy = (float)(gm[2] * Math.Cos(roll) - gm[1] * Math.Sin(roll));
-
-                    // float azim = (float)Math.Atan2(-gm[0], gm[2]);
-
                     Console.WriteLine("{0:f3}\t{1:f3}\t{2:f3}/           ", ax, ay, az);
-                    //Console.WriteLine("{0:f3}\t{1:f3}\t{2:f3}                  \n{3:f3}         ", gm[0], gm[1], gm[2], azim * 180 / Math.PI);
+
+
+                    float roll = (float)Math.Acos(-az);
+                    float pitch = (float)Math.Acos(ax);
+
+                    float mgy = (float)(gm[1] * Math.Cos(pitch) + gm[2] * Math.Sin(pitch) * Math.Sin(roll) + gm[1] * Math.Cos(roll) * Math.Sin(pitch));
+
+                    float mgz = (float)(gm[2] * Math.Cos(roll) - gm[1] * Math.Sin(roll));
+
+                    float azim = (float)Math.Atan2(-gm[1], gm[2]);
+                    Console.WriteLine("{0:f3}\t{1:f3}\t{2:f3}                  \n{3:f3}         ", gm[0], gm[1], gm[2], azim * 180 / Math.PI);
+
+                    float azim2 = (float)Math.Atan2(mgy, mgz);
+                    Console.WriteLine("{0:f3}\t{1:f3}          \n{2:f3}        ", mgy, mgz, azim2 * 180 / Math.PI);
 
                     float alpha = (float)(Math.Acos(ay));
 
 
-                    float ang1 = (float)Math.Atan2(ax, az);
-                    //   if (ax < 0) ang1 += (float)Math.PI;
+                    float ang1 = (float)Math.Atan2(-az, ax);
 
 
                     float l1 = arm_len / ay * (float)Math.Sin(alpha);
@@ -249,7 +254,7 @@ namespace openGL_Visualaser
 
                     img.SetPixel(px, pz, Color.Black);
 
-                    Console.WriteLine("{0:f3}\t{1:f3}\t{2:f3}                ", l1, l2, ay);
+                    //Console.WriteLine("{0:f3}\t{1:f3}\t{2:f3}                ", l1, l2, ay);
 
 
 
@@ -283,14 +288,14 @@ namespace openGL_Visualaser
 
 
                     GL.Color3(1f, 0f, 0f);
-                    GL.Vertex3(l1 * 2, 0, 5f);
+                    GL.Vertex3(l1 * 2 * Math.Cos(azim2), 0, 5f + l1 * 2 * Math.Sin(azim2));
                     GL.Color3(0f, 0f, 1f);
-                    GL.Vertex3(l2 * 2, ay * 2, 5f);
+                    GL.Vertex3(l2 * 2 * Math.Cos(azim2), ay * 2, 5f + l2 * 2 * Math.Sin(azim2));
 
                     GL.Color3(1f, 0f, 1f);
                     GL.Vertex3(l2 * 2, ay * 2, 5f);
 
-                    GL.Vertex3(l2 * 2, ay * 2 - Math.Cos(ang1), 5f + Math.Sin(ang1));
+                    GL.Vertex3(l2 * 2, ay * 2 + Math.Cos(ang1), 5f + Math.Sin(ang1));
 
                     GL.End();
 
