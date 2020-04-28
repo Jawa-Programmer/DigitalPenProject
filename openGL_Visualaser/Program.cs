@@ -218,24 +218,39 @@ namespace openGL_Visualaser
                     Console.WriteLine("{0:f3}\t{1:f3}\t{2:f3}/           ", ax, ay, az);
 
 
-                    float roll = (float)Math.Acos(-az);
-                    float pitch = (float)Math.Acos(ax);
 
-                    float mgy = (float)(gm[1] * Math.Cos(pitch) + gm[2] * Math.Sin(pitch) * Math.Sin(roll) + gm[1] * Math.Cos(roll) * Math.Sin(pitch));
-
-                    float mgz = (float)(gm[2] * Math.Cos(roll) - gm[1] * Math.Sin(roll));
+                    float alpha = (float)(Math.Acos(ay));
 
                     float azim = (float)Math.Atan2(-gm[1], gm[2]);
                     Console.WriteLine("{0:f3}\t{1:f3}\t{2:f3}                  \n{3:f3}         ", gm[0], gm[1], gm[2], azim * 180 / Math.PI);
 
-                    float azim2 = (float)Math.Atan2(mgy, mgz);
-                    Console.WriteLine("{0:f3}\t{1:f3}          \n{2:f3}        ", mgy, mgz, azim2 * 180 / Math.PI);
+                    float azim2 = 0, ang1 = 0;
 
-                    float alpha = (float)(Math.Acos(ay));
+                    {
+                        double alf = -Math.Acos(ax);
+                        double bet = -Math.Acos(az);
+                        double gam = -Math.Atan2(ax, az);
 
+                        //rot gamma
+                        double mx1 = gm[0];
+                           double my1 = gm[1] * Math.Cos(gam) - gm[2] * Math.Sin(gam);
+                           double mz1 = gm[1] * Math.Sin(gam) + gm[2] * Math.Cos(gam);
+                        /*float mx1 = gm[0];
+                        float my1 = gm[1];
+                        float mz1 = gm[2];*/
+                        //rot beta
+                        double mx2 = mx1 * Math.Cos(bet) + mz1 * Math.Sin(bet);
+                        double my2 = my1;
+                        double mz2 = -mx1 * Math.Sin(bet) + mz1 * Math.Cos(bet);
+                        //rot alpha
+                        double my3 = mx2 * Math.Sin(alf) + my2 * Math.Cos(alf);
+                        double mz3 = mz2;
 
-                    float ang1 = (float)Math.Atan2(-az, ax);
+                        azim2 = (float)Math.Atan2(my3, mz3);
+                        ang1 = (float)gam;
+                    }
 
+                    Console.WriteLine("{0:f3}                  \n{1:f3}         ", ang1 * 180 / Math.PI, azim2 * 180 / Math.PI);
 
                     float l1 = arm_len / ay * (float)Math.Sin(alpha);
 
