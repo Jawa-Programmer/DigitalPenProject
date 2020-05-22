@@ -1,0 +1,172 @@
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace NeuroTest
+{
+    /*
+    class Neuro
+    {
+        public static double sigmoid(double x)
+        {
+            return 1 / (1 + Math.Exp(-x));
+        }
+        public static double sigmoidGrad(double x)
+        {
+            return ((1 - x) * x);
+        }
+
+        public double output, delta;
+        public Synaps[] input;
+        public void update()
+        {
+            double prom = 0;
+            foreach (Synaps s in input)
+            {
+                prom += s.inp.output * s.weight;
+            }
+            output = sigmoid(prom);
+        }
+    }
+    class inputNeuro : Neuro
+    {
+        public void setOutput(double outp) { output = sigmoid(outp); }
+    }
+
+    class Synaps
+    {
+        public Neuro inp, outp;
+        public double weight, delwe = 0;
+    }*/
+    /*
+    class backup
+    {
+        static double[,] dataset = new double[6, 3] { { 0, 0, 0 }, { 0, 1, 1 }, { 1, 0, 1 }, { 1, 1, 2 }, { 0, 2, 2 }, { 2, 0, 2 } };
+        void main()
+        {
+            Random rand = new Random();
+            inputNeuro a = new inputNeuro(), b = new inputNeuro();
+            Neuro d1 = new Neuro(), d2 = new Neuro(), o = new Neuro();
+            Synaps[] s = new Synaps[6];
+
+            if (File.Exists("neuro.txt"))
+            {
+                using (StreamReader sr = new StreamReader("neuro.txt"))
+                {
+                    string[] k = sr.ReadToEnd().Split(' ');
+                    for (int i = 0; i < 6; i++)
+                    {
+                        s[i] = new Synaps();
+                        s[i].weight = double.Parse(k[i]);
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < 6; i++) { s[i] = new Synaps(); s[i].weight = rand.NextDouble(); }
+                using (StreamWriter sw = new StreamWriter("neuro.txt", false, System.Text.Encoding.Default))
+                {
+                    sw.WriteLine("{0} {1} {2} {3} {4} {5}", s[0].weight, s[1].weight, s[2].weight, s[3].weight, s[4].weight, s[5].weight);
+                }
+            }
+            Console.WriteLine("{0} {1} {2} {3} {4} {5}", s[0].weight, s[1].weight, s[2].weight, s[3].weight, s[4].weight, s[5].weight);
+
+            s[0].inp = a;
+            s[0].outp = d1;
+
+            s[1].inp = a;
+            s[1].outp = d2;
+
+            s[2].inp = b;
+            s[2].outp = d1;
+
+            s[3].inp = b;
+            s[3].outp = d2;
+
+            s[4].inp = d1;
+            s[4].outp = o;
+
+            s[5].inp = d2;
+            s[5].outp = o;
+
+            d1.input = new Synaps[2];
+            d1.input[0] = s[0];
+            d1.input[1] = s[2];
+
+            d2.input = new Synaps[2];
+            d2.input[0] = s[1];
+            d2.input[1] = s[3];
+
+            o.input = new Synaps[2];
+            o.input[0] = s[4];
+            o.input[1] = s[5];
+
+
+            const double E = 0.7, Alp = 0.3;
+            //  Console.WriteLine("{0} {1} {2}", d1.output, d2.output,o.output);
+            Console.Clear();
+            for (int j = 0; j < 100000; j++)
+            {
+                Console.SetCursorPosition(0, 0);
+                Console.WriteLine("{0} пок. коэф: ", j);
+                Console.WriteLine("{0:f4} {1:f4} {2:f4} {3:f4} {4:f4} {5:f4}", s[0].weight, s[1].weight, s[2].weight, s[3].weight, s[4].weight, s[5].weight);
+                double error = 0;
+                int cor = 0;
+                for (int i = 0; i < dataset.GetLength(0); i++)
+                {
+                    a.setOutput(dataset[i, 0]);
+                    b.setOutput(dataset[i, 1]);
+                    d1.update();
+                    d2.update();
+                    o.update();
+                    int uns = (int)Math.Round(o.output);
+                    if (uns == dataset[i, 2]) cor++;
+                    error += (o.output - dataset[i, 2]) * (o.output - dataset[i, 2]);
+                    {
+                        o.delta = (o.output * (dataset[i, 2] - o.output)) * Neuro.sigmoidGrad(o.output);
+                        d1.delta = (s[4].weight * o.delta) * Neuro.sigmoidGrad(d1.output);
+                        d2.delta = (s[5].weight * o.delta) * Neuro.sigmoidGrad(d2.output);
+
+                        // a.delta = (s[0].weight * d1.delta + s[1].weight * d2.delta) * Neuro.sigmoidGrad(a.output);
+                        //  b.delta = (s[2].weight * d1.delta + s[3].weight * d2.delta) * Neuro.sigmoidGrad(b.output);
+
+                        for (int t = 0; t < 6; t++)
+                        {
+                            double grad = s[t].inp.output * s[t].outp.delta;
+                            double dw = E * grad + Alp * s[t].delwe;
+                            s[t].delwe = dw;
+                            s[t].weight += dw;
+                        }
+                    }
+                    Console.WriteLine("дат.ст. : {0}, {1}. отв: {2}. прав: {3}", dataset[i, 0], dataset[i, 1], uns, dataset[i, 2]);
+                }
+                error /= 4;
+                Console.WriteLine("прав отв: {0}, ошиб: {1}", cor, error);
+                // Thread.Sleep(10);
+            }
+
+            /*  Console.WriteLine("Введите два целых числа: ");
+
+              string[] data = Console.ReadLine().Split(' ');
+              a.setOutput(double.Parse(data[0]));
+              b.setOutput(double.Parse(data[1]));
+              d1.update();
+              d2.update();
+              o.update();
+
+
+              Console.WriteLine("Нейронная сеть считает, что A + B = {0}", Math.Round(o.output));*/
+
+            /*
+            using (StreamWriter sw = new StreamWriter("neuro.txt", false, System.Text.Encoding.Default))
+            {
+                sw.WriteLine("{0} {1} {2} {3} {4} {5}", s[0].weight, s[1].weight, s[2].weight, s[3].weight, s[4].weight, s[5].weight);
+            }
+            Console.ReadKey();
+        }
+    }*/
+}

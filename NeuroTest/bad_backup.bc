@@ -1,0 +1,299 @@
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+
+namespace NeuroTest
+{
+
+    class Neurolink
+    {
+        const double E = 0.7, A = 0.2;
+        public static double hyperTanGrad(double x)
+        {
+            return 1 - x * x;
+        }
+        public static double SigmoidGrad(double x)
+        {
+            return ((1 - x) * x);
+        }
+        public static double Sigmoid(double x)
+        {
+            return 1 / (1 + Math.Exp(-x));
+        }
+        private class Neuron
+        {
+            public HashSet<Synaps> input = new HashSet<Synaps>(), outsin = new HashSet<Synaps>();
+            public double output, delta;
+            public void findDelta()
+            {
+                double s = 0;
+                foreach (Synaps sn in outsin)
+                {
+                    s += sn.b.delta * sn.b.output;
+                }
+                //delta = s * hyperTanGrad(output);
+                delta = s * SigmoidGrad(output);
+            }
+            public void findDelta(double cor)
+            {
+                // delta = (cor - output) * hyperTanGrad(output);
+                delta = (cor - output) * SigmoidGrad(output);
+            }
+            public void update()
+            {
+                output = 0;
+                foreach (Synaps s in input) output += s.a.output * s.weight;
+                // output = Math.Tanh(output);
+                output = Sigmoid(output);
+            }
+        }
+        private class Synaps
+        {
+            public Synaps(Neuron i, Neuron o, double w)
+            {
+                a = i; b = o; weight = w;
+            }
+            public double weight = 1, deltaweight = 0;
+            public void learn()
+            {
+                double gradient = a.output * b.delta;
+                double dw = E * gradient + A * deltaweight;
+                deltaweight = dw;
+                weight += dw;
+            }
+            public Neuron a, b;
+        }
+
+        Neuron[] inputNeurons = new Neuron[2];
+        Neuron[] layout1 = new Neuron[2];
+        Neuron[] layout2 = new Neuron[1];
+
+        Neuron[] outputNeurons = new Neuron[1];
+
+        HashSet<Synaps> i_l1 = new HashSet<Synaps>();
+        HashSet<Synaps> l1_l2 = new HashSet<Synaps>();
+        HashSet<Synaps> l2_o = new HashSet<Synaps>();
+
+
+        public Neurolink()
+        {
+            for (int a = 0; a < inputNeurons.Length; a++)
+            {
+                inputNeurons[a] = new Neuron();
+            }
+            for (int a = 0; a < layout1.Length; a++)
+            {
+                layout1[a] = new Neuron();
+            }
+            for (int a = 0; a < layout2.Length; a++)
+            {
+                layout2[a] = new Neuron();
+            }
+            for (int a = 0; a < outputNeurons.Length; a++)
+            {
+                outputNeurons[a] = new Neuron();
+            }
+
+            if (File.Exists("neurolink.txt"))
+            {
+                using (StreamReader sr = new StreamReader("neurolink.txt"))
+                {
+                    string[] k = sr.ReadToEnd().Split(' ');
+                    int i = 0;
+                    foreach (Neuron na in inputNeurons)
+                    {
+                        foreach (Neuron nb in layout1)
+                        {
+                            Synaps s = new Synaps(na, nb, double.Parse(k[i]));
+                            i++;
+
+                            na.outsin.Add(s);
+                            nb.input.Add(s);
+                            i_l1.Add(s);
+                        }
+                    }
+                    foreach (Neuron na in layout1)
+                    {
+                        foreach (Neuron nb in layout2)
+                        {
+                            Synaps s = new Synaps(na, nb, double.Parse(k[i]));
+                            i++;
+
+                            na.outsin.Add(s);
+                            nb.input.Add(s);
+                            l1_l2.Add(s);
+                        }
+                    }
+                    foreach (Neuron na in layout2)
+                    {
+                        foreach (Neuron nb in outputNeurons)
+                        {
+                            Synaps s = new Synaps(na, nb, double.Parse(k[i]));
+                            i++;
+
+                            na.outsin.Add(s);
+                            nb.input.Add(s);
+                            l2_o.Add(s);
+                        }
+                    }
+                    sr.Close();
+                }
+            }
+            else
+            {
+                StreamWriter sw = new StreamWriter("neurolink.txt", false, System.Text.Encoding.Default);
+
+                Random rnd = new Random();
+                foreach (Neuron na in inputNeurons)
+                {
+                    foreach (Neuron nb in layout1)
+                    {
+                        double k = rnd.NextDouble();
+                        Synaps s = new Synaps(na, nb, k);
+                        sw.Write("{0} ", k);
+                        na.outsin.Add(s);
+                        nb.input.Add(s);
+                        i_l1.Add(s);
+                    }
+                }
+                foreach (Neuron na in layout1)
+                {
+                    foreach (Neuron nb in layout2)
+                    {
+                        double k = rnd.NextDouble();
+                        Synaps s = new Synaps(na, nb, k);
+                        sw.Write("{0} ", k);
+                        na.outsin.Add(s);
+                        nb.input.Add(s);
+                        l1_l2.Add(s);
+                    }
+                }
+                foreach (Neuron na in layout2)
+                {
+                    foreach (Neuron nb in outputNeurons)
+                    {
+                        double k = rnd.NextDouble();
+                        Synaps s = new Synaps(na, nb, k);
+                        sw.Write("{0} ", k);
+                        na.outsin.Add(s);
+                        nb.input.Add(s);
+                        l2_o.Add(s);
+                    }
+                }
+                sw.Close();
+            }
+        }
+
+
+        public void input(double[] data)
+        {
+            //     inputNeurons[0].output = Math.Tanh(data[0]);
+            //     inputNeurons[1].output = Math.Tanh(data[1]);
+            inputNeurons[0].output = Sigmoid(data[0]);
+            inputNeurons[1].output = Sigmoid(data[1]);
+        }
+        public void think()
+        {
+            foreach (Neuron n in layout1) n.update();
+            foreach (Neuron n in layout2) n.update();
+            foreach (Neuron n in outputNeurons) n.update();
+        }
+        public int output()
+        {
+            return (int)Math.Round(outputNeurons[0].output);
+        }
+
+        public double outForError() { return outputNeurons[0].output; }
+        public void learn(int correct)
+        {
+            foreach (Neuron n in outputNeurons) n.findDelta(correct);
+            foreach (Neuron n in layout2) n.findDelta();
+            foreach (Synaps s in l2_o) s.learn();
+            foreach (Neuron n in layout1) n.findDelta();
+            foreach (Synaps s in l1_l2) s.learn();
+            foreach (Synaps s in i_l1) s.learn();
+        }
+        public void saveK()
+        {
+            StreamWriter sw = new StreamWriter("neurolink.txt", false, System.Text.Encoding.Default);
+            foreach (Neuron na in inputNeurons)
+            {
+                foreach (Synaps s in na.outsin)
+                {
+                    sw.Write("{0} ", s.weight);
+                }
+            }
+            foreach (Neuron na in layout1)
+            {
+                foreach (Synaps s in na.outsin)
+                {
+                    sw.Write("{0} ", s.weight);
+                }
+            }
+            foreach (Neuron na in layout2)
+            {
+                foreach (Synaps s in na.outsin)
+                {
+                    sw.Write("{0} ", s.weight);
+                }
+            }
+            sw.Close();
+        }
+
+    }
+
+    class bad_backup
+    {
+        static int[,] dataset = { { 0, 0, 0 }, { 0, 1, 1 }, { 1, 0, 1 }, { 1, 1, 0 } };
+        static void Main(string[] args)
+        {
+            Neurolink link = new Neurolink();
+            Console.WriteLine("Learning started");
+            for (int gen = 0; gen < 30000000; gen++)
+            {
+                bool log = gen % 500000 == 0;
+                if (log)
+                {
+                    Console.SetCursorPosition(0, 0);
+                    Console.WriteLine("Generation #{0}  ", gen);
+                }
+                int cor = 0;
+                double error = 0;
+                for (int set = 0; set < 4; set++)
+                {
+                    double[] data = { dataset[set, 0], dataset[set, 1] };
+                    link.input(data);
+                    link.think();
+                    if (link.output() == dataset[set, 2]) cor++;
+                    error += (dataset[set, 2] - link.outForError()) * (dataset[set, 2] - link.outForError());
+                    if (log) Console.WriteLine("{0} xor {1} = {2}   ", data[0], data[1], link.output());
+                    link.learn(dataset[set, 2]);
+                }
+                error /= 4;
+                if (log)
+                {
+                    Console.WriteLine("Correct answers: {0}/4; Error: {1}   ", cor, error);
+                    //   link.saveK();
+                }
+            }
+            Console.WriteLine("Learning finished");
+            {
+                double error = 0;
+                int cor = 0;
+                for (int set = 0; set < 4; set++)
+                {
+                    double[] data = { dataset[set, 0], dataset[set, 1] };
+                    link.input(data);
+                    link.think();
+                    if (link.output() == dataset[set, 2]) cor++;
+                    error += (dataset[set, 2] - link.outForError()) * (dataset[set, 2] - link.outForError());
+                    Console.WriteLine("{0} xor {1} = {2}   ", data[0], data[1], link.output());
+                }
+                error /= 4;
+                Console.WriteLine("Correct answers: {0}/4; Error: {1}   ", cor, error);
+            }
+            link.saveK();
+            Console.ReadKey();
+        }
+    }
+}
