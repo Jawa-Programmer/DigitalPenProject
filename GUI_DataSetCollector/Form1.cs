@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.IO.Ports;
@@ -14,7 +12,7 @@ namespace GUI_DataSetCollector
 
     public partial class Form1 : Form
     {
-        const int LERNINGS = 60, TESTINGS = 15;
+        const int LERNINGS = 200, TESTINGS = 20;
 
         static NeuroLink link = new NeuroLink();
         static AppMode appMode = AppMode.COLLECTING;
@@ -40,14 +38,14 @@ namespace GUI_DataSetCollector
         static bool SIGNAL = false, READY_READ = false, SO_POWERFUL = false, IGNORE = false;
         static bool isRuning = true, isLearning = false;
         static vector3d[] toDraw;
-        static vector3d prevError = new vector3d(), curError = new vector3d();
+        static vector4d prevError = new vector4d(), curError = new vector4d();
         static Panel panell;
         static RadioButton lern, testing, collecting;
         static Bitmap buferImage;
         static StringBuilder STR = new StringBuilder();
         static int maxPos(double[] vect)
         {
-            double max = 0; int pos = 0;
+            double max = -2; int pos = 0;
             for (int i = 0; i < vect.Length; i++)
             {
                 if (max < vect[i]) { max = vect[i]; pos = i; }
@@ -87,7 +85,7 @@ namespace GUI_DataSetCollector
             sw.Close();
             sw.Dispose();
             IGNORE = false;
-            label2.Text = "уже собрано: " + (fls.Length + 1);
+            label2.Text = "уже собрано: " + (fls.Length + 1) + " из " + (checkBox1.Checked ? TESTINGS : LERNINGS);
         }
 
         Action dataRefr = new Action(() =>
@@ -130,7 +128,7 @@ namespace GUI_DataSetCollector
                         buffr = link.result();
                         char ch = '_';
                         int mx = maxPos(buffr);
-                        if (buffr[mx] >= 0.4)
+                        if (buffr[mx] >= 0)
                             switch (mx)
                             {
                                 case 0:
@@ -179,25 +177,8 @@ namespace GUI_DataSetCollector
         Action learnStatus = new Action(() =>
         {
             inited = false;
-            curError = new vector3d();
-            if (File.Exists("errors.txt"))
-            {
-                StreamReader sr = new StreamReader("errors.csv", Encoding.Default);
-                while (!sr.EndOfStream)
-                {
-                    prevError = curError;
-                    string[] str = sr.ReadLine().Split(';');
-                    curError = new vector3d();
-                    curError.x = double.Parse(str[0]);
-                    curError.y = double.Parse(str[1]);
-                    curError.z = double.Parse(str[2]);
-                    panell.BeginInvoke((Action)(() =>
-                    {
-                        panell.Refresh();
-                        panell.Update();
-                    }));
-                }
-            }
+            curError = new vector4d();
+
             dataset[][] datasets = new dataset[10][];
             dataset[][] testsets = new dataset[10][];
             for (int i = 0; i < 10; i++)
@@ -215,7 +196,8 @@ namespace GUI_DataSetCollector
                     testsets[i][j] = new dataset(path[j]);
                 }
             }
-            for (; link.generation < 6000000; link.generation++)
+            link.EpochInit();
+            for (; link.generation < 1000000; link.generation++)
             {
                 if (!isLearning) break;
                 double learnError = 0;
@@ -228,35 +210,39 @@ namespace GUI_DataSetCollector
                         link.learn(datasets[n][i].result);
                     }
                 }
+                link.fixRProp();
                 if (link.generation % 500 == 0)
                 {
                     learnError /= (LERNINGS * 10);
-                    double mindError = 0;
+                    double mindError = 0, corct = 0;
                     for (int i = 0; i < 10; i++)
                     {
                         for (int n = 0; n < 10; n++)
                         {
                             link.think(testsets[n][i].data);
                             mindError += link.curError(testsets[n][i].result);
+                            int mx = maxPos(link.result());
+                            if (mx == n && link.result()[n] > 0) corct++;
                         }
                     }
                     mindError /= (TESTINGS * 10);
+                    corct /= (TESTINGS * 10);
                     prevError = curError;
-                    curError = new vector3d();
+                    curError = new vector4d();
                     curError.x = link.generation;
                     curError.y = mindError;
                     curError.z = learnError;
+                    curError.t = corct;
                     StreamWriter sr = new StreamWriter("errors.csv", true, Encoding.Default);
-                    sr.WriteLine("{0};{1};{2}", link.generation, mindError, learnError);
+                    sr.WriteLine("{0};{1};{2};{3}", link.generation, mindError, learnError, corct);
                     sr.Close();
                     panell.BeginInvoke((Action)(() =>
                     {
                         panell.Refresh();
-                        panell.Update();
                     }));
                 }
 
-                if (link.generation % 5000 == 0) { link.saveToFile(); link.saveToFileCopy(); }
+                if (link.generation % 1000 == 0) { link.saveToFile(); link.saveToFileCopy(); }
             }
             Thread.Sleep(0);
 
@@ -283,7 +269,7 @@ namespace GUI_DataSetCollector
 
         private void numericUpDown1_ValueChanged(object sender, EventArgs e)
         {
-            label2.Text = Directory.Exists((checkBox1.Checked ? "t" : "l") + numericUpDown1.Value + "/") ? ("уже собрано: " + (Directory.GetFiles((checkBox1.Checked ? "t" : "l") + numericUpDown1.Value + "/").Length)) : ("уже собрано: 0");
+            label2.Text = (Directory.Exists((checkBox1.Checked ? "t" : "l") + numericUpDown1.Value + "/") ? ("уже собрано: " + (Directory.GetFiles((checkBox1.Checked ? "t" : "l") + numericUpDown1.Value + "/").Length)) : ("уже собрано: 0")) + " из " + (checkBox1.Checked ? TESTINGS : LERNINGS);
         }
 
         private void Form1_KeyUp(object sender, KeyEventArgs e)
@@ -356,7 +342,7 @@ namespace GUI_DataSetCollector
                 radioButton4.Enabled = false;
                 button5.Text = "остановить обучение";
                 buferImage = new Bitmap(5000, 5000 * panel1.Height / panel1.Width);
-                lernThr = new Task(learnStatus);
+                lernThr = new Task(learnStatus, TaskCreationOptions.LongRunning);
                 lernThr.Start();
             }
             else
@@ -490,15 +476,17 @@ namespace GUI_DataSetCollector
                             pen.Width = 2;
                             g.DrawLine(pen, 0, hd * 5, buferImage.Width, 5 * hd);
                         }
-                        float kx = buferImage.Width / 5000000f, ky = buferImage.Height;
+                        float kx = buferImage.Width / 1000000f, ky = buferImage.Height;
                         pen.Color = Color.Red;
                         pen.Width = 1;
                         g.DrawLine(pen, (float)prevError.x * kx, (1 - (float)prevError.y) * ky, (float)curError.x * kx, (1 - (float)curError.y) * ky);
                         pen.Color = Color.Green;
                         g.DrawLine(pen, (float)prevError.x * kx, (1 - (float)prevError.z) * ky, (float)curError.x * kx, (1 - (float)curError.z) * ky);
-                        if (curError.x != prevGen)
+                        pen.Color = Color.Blue;
+                        g.DrawLine(pen, (float)prevError.x * kx, (1 - (float)prevError.t) * ky, (float)curError.x * kx, (1 - (float)curError.t) * ky);
+                        if (curError.x > prevGen)
                         {
-                            richTextBox2.AppendText("gen#" + curError.x + "; ошибка обобщения: " + curError.y + "; ошибка обучения: " + curError.z + "\n");
+                            richTextBox2.AppendText("gen#" + curError.x + "; ошибка обобщения: " + curError.y + "; ошибка обучения: " + curError.z + "; Степень распознания: " + curError.t + "\n");
                             richTextBox2.ScrollToCaret();
                             prevGen = (int)curError.x;
                         }
@@ -506,6 +494,7 @@ namespace GUI_DataSetCollector
                     }
                     break;
             }
+            System.GC.Collect();
         }
 
         private void Form1_FormClosed(object sender, FormClosedEventArgs e)
@@ -602,7 +591,7 @@ namespace GUI_DataSetCollector
             InitializeComponent();
             buferImage = new Bitmap(1000, 1000 * panel1.Height / panel1.Width);
             SCALE = (float)panel1.Height / buferImage.Height;
-            label2.Text = Directory.Exists((checkBox1.Checked ? "t" : "l") + numericUpDown1.Value + "/") ? ("уже собрано: " + (Directory.GetFiles((checkBox1.Checked ? "t" : "l") + numericUpDown1.Value + "/").Length)) : ("уже собрано: 0");
+            label2.Text = (Directory.Exists((checkBox1.Checked ? "t" : "l") + numericUpDown1.Value + "/") ? ("уже собрано: " + (Directory.GetFiles((checkBox1.Checked ? "t" : "l") + numericUpDown1.Value + "/").Length)) : ("уже собрано: 0")) + " из " + (checkBox1.Checked ? TESTINGS : LERNINGS);
             KeyPreview = true;
             string[] ports = SerialPort.GetPortNames();
             listView1.Items.Clear();
@@ -620,8 +609,13 @@ namespace GUI_DataSetCollector
     {
         public double x, y, z;
     };
+    class vector4d
+    {
+        public double x, y, z, t;
+    };
     class NeuroLink
     {
+        /*
         public static double SigmoidGrad(double x)
         {
             return ((1 - x) * x);
@@ -629,42 +623,79 @@ namespace GUI_DataSetCollector
         public static double Sigmoid(double x)
         {
             return 1 / (1 + Math.Exp(-x));
+        }*/
+        public static double TanhGrad(double fx)
+        {
+            return 1 - fx * fx;
         }
-        /* public static double TanhGrad(double x)
-         {
-             return 1 - x * x;
-         }*/
         private class Neuron
         {
-            private bool isOutput = false;
-            public Neuron(int prk, bool isOut = false)
+            public Neuron(int prk)
             {
                 kf = new double[prk];
                 dkf = new double[prk];
-                isOutput = isOut;
+
+                // далее только для упругого спуска
+
+                grad = new double[prk];
+                prevGrSig = new bool[prk];
+                dbias = 0.1;
+                for (int i = 0; i < prk; i++) dkf[i] = 0.1;
             }
             //коэфециенты входящих синапсисов
-            public double[] kf, dkf;
-            public double output, delta, bias, dbias = 0;
+            public double[] kf, dkf, grad;
+            bool[] prevGrSig;
+            bool prevBGrSig;
+            public double output, delta, bias, dbias, biasGrad;
+            public void initGrads()
+            {
+                for (int i = 0; i < grad.Length; i++)
+                    grad[i] = 0;
+                biasGrad = 0;
+            }
             public void update(Neuron[] neus)
             {
                 output = bias;
                 for (int i = 0; i < neus.Length; i++) output += neus[i].output * kf[i];
-                // output = isOutput ? Sigmoid(output) : Math.Tanh(output);
-                output = Sigmoid(output);
+                output = Math.Tanh(output);
             }
             public void findDelta(int pos, Neuron[] neus)
             {
                 double sum = 0;
                 for (int i = 0; i < neus.Length; i++) sum += neus[i].kf[pos] * neus[i].delta;
-                delta = sum * SigmoidGrad(output);
+                delta = sum * TanhGrad(output);
             }
             public void findDelta(double cor)
             {
-                delta = (cor - output) * SigmoidGrad(output);
+                delta = (cor - output) * TanhGrad(output);
+            }
+            public void fixRProps()
+            {
+                for (int i = 0; i < grad.Length; i++)
+                {
+                    if (grad[i] == 0) continue;
+                    bool sign = grad[i] > 0;
+                    dkf[i] *= (sign == prevGrSig[i]) ? N : n;
+                    if (dkf[i] < 0.000000001) dkf[i] = 0.000000001;
+                    else if (dkf[i] > 50) dkf[i] = 50;
+                    kf[i] += grad[i] > 0 ? dkf[i] : -dkf[i];
+                    grad[i] = 0;
+                    prevGrSig[i] = sign;
+                }
+                {
+                    if (biasGrad == 0) return;
+                    bool sign = biasGrad > 0;
+                    dbias *= (sign == prevBGrSig) ? N : n;
+                    if (dbias < 0.000000001) dbias = 0.000000001;
+                    else if (dbias > 50) dbias = 50;
+                    bias += biasGrad > 0 ? dbias : -dbias;
+                    biasGrad = 0;
+                    prevBGrSig = sign;
+                }
             }
             public void correctWeights(Neuron[] neus)
-            {
+            {//Метод простого градентного спуска
+                /*
                 for (int i = 0; i < kf.Length; i++)
                 {
                     double gradient = neus[i].output * delta;
@@ -677,13 +708,25 @@ namespace GUI_DataSetCollector
                     double dw = E * gradient + A * dbias;
                     dbias = dw;
                     bias += dw;
+                }*/
+                //метод упругого спуска
+                for (int i = 0; i < kf.Length; i++)
+                {
+                    grad[i] += neus[i].output * delta;
+                }
+                {
+                    biasGrad += delta;
                 }
             }
         }
         public int generation;
-        const int INP = 99, H1 = 110, H2 = 50, O = 10;
+        //const int INP = 99, H1 = 60, H2 = 30, O = 10;
+        //const int INP = 99, H1 = 150, H2 = 60, O = 10;
+        const int INP = 99, H1 = 100, H2 = 40, O = 10;
         //E - обучаемость, A - инертность
-        const double E = 0.000006, A = 0.06;
+        const double E = 0.000005, A = 0.06;
+        //Изменение прироста коэффециентов в случаях с градиентом одного или разных знаков
+        const double n = 0.5, N = 1.2;
         //массив массивов нейронов. Нейроны распределны по массивам в соответсвии со слоем
         Neuron[][] layouts = new Neuron[4][];
         string filepath;
@@ -729,7 +772,7 @@ namespace GUI_DataSetCollector
                 }
                 for (int i = 0; i < layouts[3].Length; i++)
                 {
-                    layouts[3][i] = new Neuron(H2, true);
+                    layouts[3][i] = new Neuron(H2);
                     for (int j = 0; j < layouts[3][i].kf.Length; j++)
                     {
                         layouts[3][i].kf[j] = double.Parse(kf[kk]);
@@ -753,7 +796,7 @@ namespace GUI_DataSetCollector
                     layouts[1][i] = new Neuron(INP);
                     for (int j = 0; j < layouts[1][i].kf.Length; j++)
                     {
-                        double ko = (r.NextDouble() * 5) - 2.5;
+                        double ko = (r.NextDouble() * 10) - 5;
                         layouts[1][i].kf[j] = ko;
                         sw.Write("{0} ", ko);
                     }
@@ -765,7 +808,7 @@ namespace GUI_DataSetCollector
                     layouts[2][i] = new Neuron(H1);
                     for (int j = 0; j < layouts[2][i].kf.Length; j++)
                     {
-                        double ko = (r.NextDouble() * 5) - 2.5;
+                        double ko = (r.NextDouble() * 10) - 5;
                         layouts[2][i].kf[j] = ko;
                         sw.Write("{0} ", ko);
                     }
@@ -774,10 +817,10 @@ namespace GUI_DataSetCollector
                 }
                 for (int i = 0; i < layouts[3].Length; i++)
                 {
-                    layouts[3][i] = new Neuron(H2, true);
+                    layouts[3][i] = new Neuron(H2);
                     for (int j = 0; j < layouts[3][i].kf.Length; j++)
                     {
-                        double ko = (r.NextDouble() * 5) - 2.5;
+                        double ko = (r.NextDouble() * 10) - 5;
                         layouts[3][i].kf[j] = ko;
                         sw.Write("{0} ", ko);
                     }
@@ -789,11 +832,15 @@ namespace GUI_DataSetCollector
 
         }
 
+        
+        public void EpochInit()
+        {
+            for (int i = 0; i < layouts.Length; i++) for (int j = 0; j < layouts[i].Length; j++) layouts[i][j].initGrads();
+        }
         public void think(double[] data)
         {
             for (int i = 0; i < layouts[0].Length; i++)
-                //  layouts[0][i].output = Math.Tanh(data[i]);
-                layouts[0][i].output = Sigmoid(data[i]);
+                layouts[0][i].output = Math.Tanh(data[i]);
             for (int j = 1; j < layouts.Length; j++)
                 for (int i = 0; i < layouts[j].Length; i++)
                     layouts[j][i].update(layouts[j - 1]);
@@ -812,25 +859,27 @@ namespace GUI_DataSetCollector
                 layouts[layouts.Length - 1][i].findDelta(correct[i]);
             for (int i = layouts.Length - 2; i > 0; i--)
             {
-                for (int j = 0; j < layouts[i].Length; j++)
+                int max = Math.Max(layouts[i].Length, layouts[i + 1].Length);
+                for (int j = 0; j < max; j++)
                 {
-                    layouts[i][j].findDelta(j, layouts[i + 1]);
+                    if (layouts[i].Length > j) layouts[i][j].findDelta(j, layouts[i + 1]);
+                    if (layouts[i + 1].Length > j) layouts[i + 1][j].correctWeights(layouts[i]);
                 }
             }
-            for (int i = layouts.Length - 1; i > 0; i--)
-            {
-                for (int j = 0; j < layouts[i].Length; j++)
-                {
-                    layouts[i][j].correctWeights(layouts[i - 1]);
-                }
-            }
+            for (int j = 0; j < layouts[1].Length; j++)
+                layouts[1][j].correctWeights(layouts[0]);
+        }
+
+        public void fixRProp()
+        {
+            for (int i = 1; i < layouts.Length; i++) for (int j = 0; j < layouts[i].Length; j++) layouts[i][j].fixRProps();
         }
         public double curError(double[] correct)
         {
             double un = 0;
             for (int i = 0; i < layouts[layouts.Length - 1].Length; i++)
                 un += (correct[i] - layouts[layouts.Length - 1][i].output) * (correct[i] - layouts[layouts.Length - 1][i].output);
-            return un / layouts.Length;
+            return un / layouts[layouts.Length - 1].Length;
         }
         public void saveToFileCopy()
         {
